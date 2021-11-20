@@ -11,7 +11,7 @@ func EncodeURL(url string) string {
 	byteUrl := hashedUrl[:]
 
 	/* Return encoded url */
-	return base64.StdEncoding.EncodeToString(byteUrl)
+	return base64.StdEncoding.EncodeToString(byteUrl)[:8]
 }
 
 func EncodePassword(password string) (string, error) {

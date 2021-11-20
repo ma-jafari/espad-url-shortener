@@ -3,8 +3,8 @@ package controllers
 import (
 	"github.com/kataras/iris/v12"
 	"time"
+	"url-shortener/business/helpers"
 	"url-shortener/business/url/models"
-	"url-shortener/utils/hash"
 	"url-shortener/utils/json"
 )
 
@@ -15,12 +15,11 @@ func InsertUrl(ctx iris.Context) {
 		return
 	}
 
-	if request.ShortURL == "" {
-		request.ShortURL = hash.EncodeURL(request.OriginalURL)
+	if err := helpers.CheckAndValueSettingsPreInsertURL(request); err != nil {
+		json.WriteErrorWithMsg(ctx, 400, err.Error())
+		return
 	}
-	if request.ExpireAt.IsZero() {
-		request.ExpireAt = time.Now().AddDate(0, 0, models.DEFAULT_EXPIRE_TIME)
-	}
+
 	response, err := request.Insert()
 	if err != nil {
 		json.WriteErrorWithMsg(ctx, 500, err.Error())
@@ -33,12 +32,59 @@ func InsertUrl(ctx iris.Context) {
 func GetUrl(ctx iris.Context) {
 	hashURL := ctx.Params().GetString("string")
 
-	resultUrl, err := models.GetOriginalURLFromHash(hashURL)
+	resultUrl, err := models.GetURLObjectFromShortURL(hashURL)
 	if err != nil {
-		json.WriteResponse(ctx, 404)
+		json.WriteError(ctx, 404)
+		return
+	}
+
+	if resultUrl.ExpireAt.Before(time.Now()) {
+		json.WriteErrorWithMsg(ctx, 400, "Expired!")
 		return
 	}
 
 	ctx.Redirect(resultUrl.OriginalURL, 301)
 	return
+}
+
+func CheckUserURLSHistory(ctx iris.Context) {
+	userID := ctx.Params().GetString("id")
+
+	result, err := models.GetUserUrlHistory(userID)
+	if err != nil {
+		json.WriteError(ctx, 400)
+		return
+	}
+
+	response := &models.URLHistories{}
+	for _, url := range result {
+		var isExpired bool
+		if url.ExpireAt.Before(time.Now()) {
+			isExpired = true
+		} else {
+			isExpired = false
+		}
+
+		urlHistory := &models.URLHistory{
+			OriginalURL: url.OriginalURL,
+			ShortURL:    url.ShortURL,
+			IsExpired:   isExpired,
+		}
+
+		response.URLHistory = append(response.URLHistory, urlHistory)
+	}
+
+	json.WriteResponse(ctx, response)
+}
+
+func CheckShortURL(ctx iris.Context) {
+	shortURL := ctx.Params().GetString("url")
+
+	_, err := models.GetURLObjectFromShortURL(shortURL)
+	if err == nil {
+		json.WriteError(ctx, 400)
+		return
+	}
+
+	json.WriteResponse(ctx, nil)
 }

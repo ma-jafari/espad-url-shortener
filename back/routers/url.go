@@ -11,5 +11,7 @@ func setUrlRoutes(app *iris.Application) {
 
 	urlRoute := app.Party(URL_ROUTE)
 	/******************************  ROUTES  ******************************/
+	urlRoute.Get("/check/{url:string}", controllers.CheckShortURL)
+	urlRoute.Get("/history/{id:string}", controllers.CheckUserURLSHistory)
 	urlRoute.Post("", controllers.InsertUrl)
 }

@@ -66,7 +66,7 @@
                   filled
                   color="blue-grey lighten-2"
                   label="Custome URL"
-                  v-model="urlObject.short_url"
+                  v-model="tempShortURL"
                   required
                 ></v-text-field>
               </v-col>
@@ -92,16 +92,49 @@
                 ></v-text-field>
               </v-col>
             </v-row>
-            <v-divider class="mb-8"></v-divider>
-            <v-select
-              :items="previousLinkItems"
-              label="Previous links"
-              outlined
-              @change="PreviousLink"
-            ></v-select>
+            <v-divider v-if="loggedIn"></v-divider>
+            <h4 class="mt-5" v-if="loggedIn">Prevoius Links:</h4>
+            <v-list three-line v-if="loggedIn">
+              <template v-for="item in histoyLinks">
+                <v-list-item :key="item.title">
+                  <v-list-item-avatar>
+                    <v-chip
+                      class="ma-2"
+                      color="red"
+                      text-color="white"
+                      v-if="item.is_expired"
+                    >
+                    </v-chip>
+                    <v-chip
+                      class="ma-2"
+                      color="success"
+                      text-color="white"
+                      v-else
+                    >
+                    </v-chip>
+                  </v-list-item-avatar>
+
+                  <v-list-item-content>
+                    <v-list-item-title
+                      v-html="item.original_url"
+                    ></v-list-item-title>
+                    <v-list-item-subtitle
+                      v-html="'http://localhost:8080/' + item.short_url"
+                    ></v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
+              </template>
+            </v-list>
+            <span
+              v-if="!loggedIn"
+              style="padding: 10px; border-radius: 5px; color: white"
+              class="success"
+              >To see links history, log in</span
+            >
           </v-card>
           <v-card flat v-else>
             <v-text-field
+              :disabled="loggedIn"
               filled
               color="blue-grey lighten-2"
               label="Name"
@@ -111,6 +144,7 @@
             ></v-text-field>
             <v-text-field
               filled
+              :disabled="loggedIn"
               color="blue-grey lighten-2"
               label="E-Mail"
               v-model="user.email"
@@ -118,7 +152,7 @@
               required
             ></v-text-field>
             <v-text-field
-              v-if="(loggedIn == false)"
+              v-if="loggedIn == false"
               filled
               type="password"
               color="blue-grey lighten-2"
@@ -165,7 +199,7 @@
     </v-card>
     <v-snackbar
       :color="snackbarColor"
-      :value="snackbar"
+      v-model="snackbar"
       :timeout="3000"
       left
       top
@@ -184,13 +218,14 @@ export default {
     selection: 1,
     tab: null,
     tabItems: ["shortener", "mdi-account"],
+    tempShortURL: "",
     shortened: "",
     previousLink: null,
-    previousLinkItems: ["google.com", "yahoo.com"],
     histoyLinks: [
       {
-        original_url: "google.com",
-        shortened_url: "test.testcom",
+        original_url: "",
+        shortened_url: "",
+        is_expired: false,
       },
     ],
     user: {
@@ -198,6 +233,7 @@ export default {
       email: "",
       password: "",
     },
+    userID: "",
     urlObject: {
       original_url: "",
       short_url: "",
@@ -229,9 +265,6 @@ export default {
     loggedIn: false,
   }),
   methods: {
-    PreviousLink(value) {
-      console.log(value);
-    },
     async RegisterUser() {
       if (
         this.user.name == "" ||
@@ -241,27 +274,29 @@ export default {
         this.snackbar = true;
         this.snackbarColor = "error";
         this.snackbarText = "Please fill the form";
+
         return;
       }
-
-      await this.axios
-        .post(this.$api + "/user/register", this.user)
-        .then((response) => {
-          var end = new Date();
-          end.setUTCHours(23, 59, 59, 999);
-          this.$cookies.set("token", response.data.data.token, end);
-          this.$cookies.set("email", response.data.data.email, end);
-          this.snackbar = true;
-          this.snackbarColor = "success";
-          this.snackbarText = "User registered successfully";
-        })
-        .catch((error) => {
-          console.log(error);
-          this.snackbar = true;
-          this.snackbarColor = "error";
-          this.snackbarText = error;
-          return;
-        });
+      try {
+        await this.axios
+          .post(this.$api + "/user/register", this.user)
+          .then((response) => {
+            var end = new Date();
+            end.setUTCHours(23, 59, 59, 999);
+            this.$cookies.set("token", response.data.data.token, end);
+            this.$cookies.set("email", response.data.data.email, end);
+            this.snackbar = true;
+            this.snackbarColor = "success";
+            this.snackbarText = "User registered successfully";
+            this.loggedIn = true;
+            this.userID = response.data.data.id;
+          });
+      } catch (error) {
+        this.snackbar = true;
+        this.snackbarColor = "error";
+        this.snackbarText = error;
+        return;
+      }
     },
     async LoginUser() {
       if (
@@ -281,13 +316,14 @@ export default {
           var end = new Date();
           end.setUTCHours(23, 59, 59, 999);
           this.$cookies.set("token", response.data.data.token, end);
+          this.$cookies.set("email", response.data.data.email, end);
           this.snackbar = true;
           this.snackbarColor = "success";
           this.snackbarText = "User logged in successfully";
           this.loggedIn = true;
+          this.userID = response.data.data.id;
         })
         .catch((error) => {
-          console.log(error);
           this.snackbar = true;
           this.snackbarColor = "error";
           this.snackbarText = error;
@@ -298,7 +334,10 @@ export default {
       this.$cookies.remove("email");
       this.$cookies.remove("token");
       this.loggedIn = false;
-      this.user = null;
+      this.user.name = "";
+      this.user.email = "";
+      this.user.password = "";
+      this.userID = "";
     },
     async ShortenURL() {
       if (this.urlObject.original_url == "") {
@@ -308,17 +347,17 @@ export default {
         return;
       }
 
-      this.urlObject.short_url =
-        "http://localhost:8080/" + this.urlObject.short_url;
+      this.urlObject.user_id = this.userID;
+      this.urlObject.short_url = this.tempShortURL;
       await this.axios
         .post(this.$api + "/url", this.urlObject)
         .then((response) => {
-          this.shortened = response.data.data.short_url;
+          this.shortened =
+            "http://localhost:8080/" + response.data.data.short_url;
 
-          this.urlObject = null;
+          // this.urlObject = null;
         })
         .catch((error) => {
-          console.log(error);
           this.snackbar = true;
           this.snackbarColor = "error";
           this.snackbarText = error;
@@ -332,19 +371,30 @@ export default {
         },
       };
       this.user.email = savedEmail;
-      console.log("user: ", this.user);
       await this.axios
         .get(this.$api + "/user/" + this.user.email, this.user, config)
         .then((response) => {
           this.user = response.data.data;
           this.loggedIn = true;
+          this.userID = response.data.data.id;
         })
         .catch((error) => {
-          console.log(error);
           this.snackbar = true;
           this.snackbarColor = "error";
           this.snackbarText = error;
           return;
+        });
+    },
+    async GetUserHistory() {
+      await this.axios
+        .get(this.$api + "/url/history/" + this.userID)
+        .then((response) => {
+          this.histoyLinks = response.data.data.url_history;
+        })
+        .catch((error) => {
+          this.snackbar = true;
+          this.snackbarColor = "error";
+          this.snackbarText = error;
         });
     },
     formatDate(date) {
@@ -360,14 +410,14 @@ export default {
       return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     },
   },
-  mounted() {
+  async mounted() {
     var savedEmail = this.$cookies.get("email");
     var savedToken = this.$cookies.get("token");
     if (savedEmail != null && savedToken != null) {
-      this.GetUser(savedEmail, savedToken);
+      await this.GetUser(savedEmail, savedToken);
+      await this.GetUserHistory();
     } else {
-      this.loggedIn = false
-      console.log(this.loggedIn)
+      this.loggedIn = false;
     }
   },
   watch: {
@@ -379,10 +429,16 @@ export default {
         this.urlObject.expire_at = target;
       }
     },
-    snackbar(val) {
-      if (val == true) {
-        val = false;
-      }
+    async tempShortURL(val) {
+      // let object = {
+      //   short_url: val,
+      // };
+      // let request = JSON.stringify(object);
+      await this.axios.get(this.$api + "/url/check/" + val).catch((error) => {
+        this.snackbar = true;
+        this.snackbarColor = "error";
+        this.snackbarText = error;
+      });
     },
   },
 };
