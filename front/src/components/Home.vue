@@ -24,25 +24,59 @@
         <v-tab-item v-for="item in tabItems" :key="item">
           <v-card flat v-if="item == 'shortener'">
             <v-row>
-              <v-col md="3">
-                <v-select
-                  required
-                  :items="typeItems"
-                  label="Type"
-                  outlined
-                ></v-select>
-              </v-col>
-              <v-col md="9">
+              <v-col md="12">
                 <v-text-field
+                  v-model="urlObject.original_url"
                   required
                   filled
                   color="blue-grey lighten-2"
                   label="Original URL"
                 ></v-text-field>
               </v-col>
-
               <v-col md="3">
-                <v-btn color="cyan" class="white--text" style="height: 56px">
+                <v-menu
+                  ref="datePicker"
+                  v-model="datePicker"
+                  :close-on-content-click="false"
+                  transition="scale-transition"
+                  offset-y
+                  max-width="290px"
+                  min-width="auto"
+                >
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-text-field
+                      v-model="dateFormatted"
+                      label="Expire Date"
+                      persistent-hint
+                      prepend-icon="mdi-calendar"
+                      v-bind="attrs"
+                      @blur="date = parseDate(dateFormatted)"
+                      v-on="on"
+                    ></v-text-field>
+                  </template>
+                  <v-date-picker
+                    v-model="date"
+                    no-title
+                    @input="datePicker = false"
+                  ></v-date-picker>
+                </v-menu>
+              </v-col>
+              <v-col md="9">
+                <v-text-field
+                  filled
+                  color="blue-grey lighten-2"
+                  label="Custome URL"
+                  v-model="urlObject.short_url"
+                  required
+                ></v-text-field>
+              </v-col>
+              <v-col md="3">
+                <v-btn
+                  color="cyan"
+                  class="white--text"
+                  style="height: 56px"
+                  @click="ShortenURL"
+                >
                   <v-icon left> mdi-cloud-upload </v-icon>
 
                   Shorten
@@ -84,6 +118,7 @@
               required
             ></v-text-field>
             <v-text-field
+              v-if="(loggedIn == false)"
               filled
               type="password"
               color="blue-grey lighten-2"
@@ -93,7 +128,7 @@
               required
             ></v-text-field>
             <v-row>
-              <v-col md="3">
+              <v-col md="3" v-if="loggedIn == false">
                 <v-btn
                   @click="RegisterUser"
                   color="success"
@@ -103,7 +138,7 @@
                   Register
                 </v-btn>
               </v-col>
-              <v-col>
+              <v-col v-if="loggedIn == false">
                 <v-btn
                   @click="LoginUser"
                   color="indigo lighten-1"
@@ -111,6 +146,16 @@
                   style="height: 50px"
                 >
                   Login
+                </v-btn>
+              </v-col>
+              <v-col v-if="loggedIn == true">
+                <v-btn
+                  @click="LogoutUser"
+                  color="error"
+                  class="white--text"
+                  style="height: 50px"
+                >
+                  Log out
                 </v-btn>
               </v-col>
             </v-row>
@@ -122,7 +167,6 @@
       :color="snackbarColor"
       :value="snackbar"
       :timeout="3000"
-      absolute
       left
       top
       shaped
@@ -140,8 +184,7 @@ export default {
     selection: 1,
     tab: null,
     tabItems: ["shortener", "mdi-account"],
-    typeItems: ["Private", "Public"],
-    shortened: "test",
+    shortened: "",
     previousLink: null,
     previousLinkItems: ["google.com", "yahoo.com"],
     histoyLinks: [
@@ -154,6 +197,11 @@ export default {
       name: "",
       email: "",
       password: "",
+    },
+    urlObject: {
+      original_url: "",
+      short_url: "",
+      expire_at: null,
     },
     emailRules: [
       (v) => !!v || "E-mail is required",
@@ -170,7 +218,15 @@ export default {
     snackbar: false,
     snackbarColor: "",
     snackbarText: "",
-    token: "",
+    picker: new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+      .toISOString()
+      .substr(0, 10),
+    date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+      .toISOString()
+      .substr(0, 10),
+    dateFormatted: null,
+    datePicker: false,
+    loggedIn: false,
   }),
   methods: {
     PreviousLink(value) {
@@ -194,10 +250,10 @@ export default {
           var end = new Date();
           end.setUTCHours(23, 59, 59, 999);
           this.$cookies.set("token", response.data.data.token, end);
+          this.$cookies.set("email", response.data.data.email, end);
           this.snackbar = true;
           this.snackbarColor = "success";
           this.snackbarText = "User registered successfully";
-          this.token = response.data.data.token;
         })
         .catch((error) => {
           console.log(error);
@@ -228,7 +284,7 @@ export default {
           this.snackbar = true;
           this.snackbarColor = "success";
           this.snackbarText = "User logged in successfully";
-          this.token = response.data.data.token;
+          this.loggedIn = true;
         })
         .catch((error) => {
           console.log(error);
@@ -238,18 +294,95 @@ export default {
           return;
         });
     },
+    async LogoutUser() {
+      this.$cookies.remove("email");
+      this.$cookies.remove("token");
+      this.loggedIn = false;
+      this.user = null;
+    },
+    async ShortenURL() {
+      if (this.urlObject.original_url == "") {
+        this.snackbar = true;
+        this.snackbarColor = "error";
+        this.snackbarText = "Please fill the form";
+        return;
+      }
+
+      this.urlObject.short_url =
+        "http://localhost:8080/" + this.urlObject.short_url;
+      await this.axios
+        .post(this.$api + "/url", this.urlObject)
+        .then((response) => {
+          this.shortened = response.data.data.short_url;
+
+          this.urlObject = null;
+        })
+        .catch((error) => {
+          console.log(error);
+          this.snackbar = true;
+          this.snackbarColor = "error";
+          this.snackbarText = error;
+          return;
+        });
+    },
+    async GetUser(savedEmail, savedToken) {
+      let config = {
+        headers: {
+          Authorization: "Bearer " + savedToken,
+        },
+      };
+      this.user.email = savedEmail;
+      console.log("user: ", this.user);
+      await this.axios
+        .get(this.$api + "/user/" + this.user.email, this.user, config)
+        .then((response) => {
+          this.user = response.data.data;
+          this.loggedIn = true;
+        })
+        .catch((error) => {
+          console.log(error);
+          this.snackbar = true;
+          this.snackbarColor = "error";
+          this.snackbarText = error;
+          return;
+        });
+    },
+    formatDate(date) {
+      if (!date) return null;
+
+      const [year, month, day] = date.split("-");
+      return `${month}/${day}/${year}`;
+    },
+    parseDate(date) {
+      if (!date) return null;
+
+      const [month, day, year] = date.split("/");
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    },
   },
   mounted() {
-    if (this.token == "") {
-      var savedToken = this.$cookies.get("token");
-      if (savedToken != "") {
-        this.token = savedToken;
-      }
+    var savedEmail = this.$cookies.get("email");
+    var savedToken = this.$cookies.get("token");
+    if (savedEmail != null && savedToken != null) {
+      this.GetUser(savedEmail, savedToken);
+    } else {
+      this.loggedIn = false
+      console.log(this.loggedIn)
     }
   },
   watch: {
-    token: function (val) {
-      console.log("watch: ", val);
+    date(val) {
+      if (val != null) {
+        this.dateFormatted = this.formatDate(this.date);
+        var hms = "01:12:33";
+        var target = new Date(Date.parse(val + " " + hms));
+        this.urlObject.expire_at = target;
+      }
+    },
+    snackbar(val) {
+      if (val == true) {
+        val = false;
+      }
     },
   },
 };

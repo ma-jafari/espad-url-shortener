@@ -10,12 +10,17 @@ import (
 	"url-shortener/utils/jwt"
 )
 
-//func GetUser(ctx iris.Context) {
-//
-//
-//	json.WriteResponse(ctx, response)
-//}
+func GetUser(ctx iris.Context) {
+	email := ctx.Params().GetString("email")
 
+	user, err := models.GetUserWithEmail(email)
+	if err != nil {
+		json.WriteError(ctx, 400)
+		return
+	}
+
+	json.WriteResponse(ctx, user)
+}
 
 func RegisterUser(ctx iris.Context) {
 	request := &models.User{}
@@ -70,7 +75,8 @@ func LoginUser(ctx iris.Context) {
 	})
 	if err != nil {
 		json.WriteError(ctx, 500)
-		return	}
+		return
+	}
 	response.Token = string(token)
 
 	json.WriteResponse(ctx, response)

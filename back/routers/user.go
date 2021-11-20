@@ -11,7 +11,7 @@ func setUserRoutes(app *iris.Application) {
 
 	userRoute := app.Party(USER_ROUTE)
 	/******************************  ROUTES  ******************************/
-	//userRoute.Get("/register", controllers.GetUser)
+	userRoute.Get("/{email:string}", controllers.GetUser)
 
 	userRoute.Post("/register", controllers.RegisterUser)
 	userRoute.Post("/login", controllers.LoginUser)

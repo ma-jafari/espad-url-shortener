@@ -12,8 +12,11 @@ func main() {
 	db.OpenConnection()
 	routers.SetRoutes(app)
 
-	crs := cors.AllowAll()
+	crs := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowCredentials: true,
+	})
 	app.UseRouter(crs)
 
-	app.Listen(":7070")
+	app.Listen(":6010")
 }

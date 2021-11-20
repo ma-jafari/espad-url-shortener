@@ -42,7 +42,6 @@ func (url *URL) Insert() (*URL, error) {
 	defer cancel()
 
 	url.CreatedAt = time.Now()
-	url.ExpireAt = time.Now().AddDate(0, 0, DEFAULT_EXPIRE_TIME)
 	url.ID = primitive.NewObjectID()
 	if _, err := collection.InsertOne(dbCtx, url); err != nil {
 		return nil, err
